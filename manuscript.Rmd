@@ -1,0 +1,107 @@
+---
+title: "Semantic bleaching not observed in synchronic test"
+author: "Dillon Niederhut"
+date: "September 8, 2017"
+output: pdf_document
+---
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(xtable)
+library(dplyr)
+library(robust)
+data <- read.csv('data/data.csv', stringsAsFactors=FALSE)
+```
+
+## Abstract
+
+It is well understood that the semantic content of words changes over time, but precisely how and why this happens is still unknown. Here, we test for synchronic evidence of semantic bleaching in a corpus of English language collected in 2016. We find no evidence of long-term reduction in the semantic value of words, although this may not be true when considered over shorter periods of time.
+
+## Methods
+
+```{r, fig.height=4, fig.width=6}
+ggplot(data=data, aes(x=year)) + 
+  geom_histogram(binwidth = 10)
+ggsave('hist_of_year.png')
+```
+
+First appearance of a word was acquired from Merriam Webster's recently published "Words by First Known Date", which generated years for `r sum(!is.na(data$year))` terms.
+
+Term frequency was acquired from redicorpus dataset from 2016. This generated data for `r sum(!is.na(data$proportion))` terms.
+
+Zipf statistic was calculated according to (Niederhut, 2016). This generated data for `r sum(!is.na(data$zipf_test))` terms. This number is remarkably smaller due to the computational cost of calculating something similar to a the word embedding for each term.
+
+## Results
+
+Summary stats:
+
+```{r}
+data_summary = summary(data[c('year', 'proportion', 'zipf_test')])
+print(data_summary)
+print.xtable(xtable(data_summary), file='data_summary.tex')
+```
+
+Linear model:
+
+```{r}
+from.year <- lm(zipf_test ~ year, data=data)
+summary(from.year)
+print.xtable(xtable(summary(from.year)), file='zipf_by_year.tex')
+```
+
+Outlier-robust linear model:
+
+```{r}
+from.year.rob <- lmrob(zipf_test ~ year, data=data)
+summary(from.year.rob)
+```
+
+Since 1990s
+
+```{r}
+from.nineties.rob <- lmrob(zipf_test ~ year, data=data[data$year>1990, c('year', 'zipf_test')])
+summary(from.nineties.rob)
+```
+
+Replacing zipf test with generality measure (daily moment)
+
+```{r}
+from.moment <- lm(moment ~ year, data=data)
+summary(from.moment)
+print.xtable(xtable(summary(from.moment)), file='moment_by_year.tex')
+```
+
+## Discussion
+
+```{r, fig.height=4, fig.width=6}
+ggplot(data=data[!is.na(data$zipf_test), c('year', 'zipf_test')][from.year.rob$rweights > 0, c('year', 'zipf_test')], aes(x=year, y=zipf_test)) + 
+  geom_point() + 
+  geom_abline(slope=from.year.rob$coefficients[[2]], intercept=from.year.rob$coefficients[[1]]) + 
+  ylab('Zipf statistic, without outliers') +
+  scale_color_discrete("model", labels=c("robust"))
+ggsave('zipf_by_year.png')
+```
+
+```{r, fig.height=4, fig.width=6}
+ggplot(data=data[(!is.na(data$zipf_test) & data$year > 1990), c('year', 'zipf_test')][from.nineties.rob$rweights > 0, c('year', 'zipf_test')], aes(x=year, y=zipf_test)) + 
+  geom_point() + 
+  geom_abline(slope=from.nineties.rob$coefficients[[2]], intercept=from.nineties.rob$coefficients[[1]]) + 
+  ylab('Zipf statistic, without outliers')
+ggsave('zipf_from_1990.png')
+```
+
+```{r, fig.height=4, fig.width=6}
+ggplot(data=data[!is.na(data$moment), c('year', 'moment')], aes(x=year, y=moment)) + 
+  geom_point() + 
+  geom_abline(slope=from.moment$coefficients[[2]], intercept=from.moment$coefficients[[1]]) + 
+  ylab('Generality') +
+ggsave('moment_by_year.png')
+```
+
+No relationship found between age of word and semantic value.
+
+One interpretation is that bleaching does not occur at the same rate for all words.
+
+Another interpretation is that the bleaching of a word is balanced by shifts in semantic interpretation.
+
+A final interpretation is that Merriam Webster has only chosen interesting words about which to publish the year of appearance.
